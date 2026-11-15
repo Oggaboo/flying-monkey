@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no">
+  <title>Flying Gorilla</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0b1e2d; }
+    #unity-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #0b1e2d; outline: none; touch-action: none; }
+    #loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+              gap: 14px; color: #fff; font: 600 18px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center; padding: 0 48px; }
+    #bar { width: min(280px, 70vw); height: 10px; border-radius: 5px; background: rgba(255,255,255,.18); overflow: hidden; }
+    #fill { width: 0; height: 100%; background: #ffd23f; transition: width .2s; }
+  </style>
+  <!-- 2Web SDK: served by the site, not part of this zip. Every call is a no-op when the game runs on its own. -->
+  <script src="../../sdk/2web.js"></script>
+</head>
+<body>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+  <div id="loader"><div id="status">Loading…</div><div id="bar"><div id="fill"></div></div></div>
+  <script>
+  (function () {
+    'use strict';
+    var SLUG = 'flying-gorilla';
+    var VERSION = '1.0.0';
+    console.log('Flying Gorilla ' + VERSION);
+
+    // ---- 2Web SDK, or no-op stand-ins when opened on its own -------------------------------
+    var TW = window.TwoWeb || {
+      ready: function () {}, onPause: function () {}, score: function () {},
+      ad: function () { return Promise.resolve({ shown: false, rewarded: false }); }
+    };
+
+    // ---- Sandbox rules: no popups, links out or dialogs -------------------------------------
+    window.open = function () { return null; };
+    window.alert = function (m) { console.warn(m); };
+    window.confirm = function () { return false; };
+    window.prompt = function () { return null; };
+
+    // ---- Keep saves under the game's own name (Unity uses IndexedDB "/idbfs") ---------------
+    if (window.indexedDB) {
+      var idb = window.indexedDB, open = idb.open.bind(idb), del = idb.deleteDatabase.bind(idb);
+      var own = function (n) { n = String(n); return n.indexOf(SLUG) === 0 ? n : SLUG + ':' + n; };
+      idb.open = function (n, v) { return v === undefined ? open(own(n)) : open(own(n), v); };
+      idb.deleteDatabase = function (n) { return del(own(n)); };
+    }
+
+    // ---- Remember every AudioContext so the game can be muted while paused ------------------
+    var contexts = [];
+    ['AudioContext', 'webkitAudioContext'].forEach(function (k) {
+      var C = window[k];
+      if (!C) return;
+      var Wrapped = function (opts) { var c = new C(opts); contexts.push(c); return c; };
+      Wrapped.prototype = C.prototype;
+      window[k] = Wrapped;
+    });
+
+    var unity = null, paused = false;
+    function setPaused(p) {
+      paused = !!p;
+      contexts.forEach(function (c) {
+        try { if (paused) { if (c.state === 'running') c.suspend(); } else if (c.state === 'suspended') c.resume(); } catch (e) {}
+      });
+      var M = unity && unity.Module;
+      try { if (M) { if (paused) M.pauseMainLoop(); else M.resumeMainLoop(); } } catch (e) {}
+    }
+    TW.onPause(setPaused);
+
+    // ---- Download: gzip-compressed parts, unpacked in the browser ---------------------------
+    var FILES = {
+      data: ['Build/vb.data.gz.1.bin', 'Build/vb.data.gz.2.bin'],
+      wasm: ['Build/vb.wasm.gz.bin']
+    };
+    var TOTAL = 43420000; // compressed bytes, for the progress bar only
+    var got = 0;
+    var status = document.getElementById('status'), fill = document.getElementById('fill');
+    function progress(f) { fill.style.width = Math.min(100, f * 100).toFixed(1) + '%'; }
+
+    function fetchPart(url) {
+      return fetch(url).then(function (r) {
+        if (!r.ok) throw new Error('Could not load ' + url + ' (' + r.status + ')');
+        var reader = r.body.getReader(), chunks = [];
+        function pump() {
+          return reader.read().then(function (s) {
+            if (s.done) return new Blob(chunks);
+            chunks.push(s.value); got += s.value.length; progress(0.9 * got / TOTAL);
+            return pump();
+          });
+        }
+        return pump();
+      });
+    }
+    function unpack(parts, type) {
+      return Promise.all(parts.map(fetchPart)).then(function (blobs) {
+        var blob = new Blob(blobs);
+        return blob.slice(0, 2).arrayBuffer().then(function (head) {
+          var b = new Uint8Array(head);
+          if (b[0] !== 0x1f || b[1] !== 0x8b) return blob; // already unpacked by the server
+          if (!window.DecompressionStream) throw new Error('This browser is too old to run the game. Please update it.');
+          return new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).blob();
+        }).then(function (b) { return URL.createObjectURL(new Blob([b], { type: type })); });
+      });
+    }
+
+    function fail(err) {
+      status.textContent = 'The game could not start: ' + (err && err.message || err);
+      throw err; // let the 2Web SDK show it too
+    }
+
+    Promise.all([unpack(FILES.data, 'application/octet-stream'), unpack(FILES.wasm, 'application/wasm')])
+      .then(function (urls) {
+        return new Promise(function (resolve, reject) {
+          var s = document.createElement('script');
+          s.src = 'Build/vb.loader.js';
+          s.onload = function () { resolve(urls); };
+          s.onerror = function () { reject(new Error('Could not load Build/vb.loader.js')); };
+          document.body.appendChild(s);
+        });
+      })
+      .then(function (urls) {
+        return createUnityInstance(document.getElementById('unity-canvas'), {
+          dataUrl: urls[0],
+          frameworkUrl: 'Build/vb.framework.js',
+          codeUrl: urls[1],
+          streamingAssetsUrl: 'StreamingAssets',
+          companyName: '',
+          productName: 'Flying Gorilla',
+          productVersion: VERSION,
+          devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+          showBanner: function (msg, type) { if (type === 'error') console.error(msg); else console.warn(msg); }
+        }, function (p) { progress(0.9 + 0.1 * p); });
+      })
+      .then(function (instance) {
+        unity = instance;
+        window.__game = { unity: instance, version: VERSION, setPaused: setPaused, get paused() { return paused; } };
+        document.getElementById('loader').remove();
+        if (paused) setPaused(true);
+        TW.ready();
+      })
+      .catch(fail);
+  })();
+  </script>
+</body>
+</html>

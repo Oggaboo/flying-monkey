@@ -1,0 +1,11 @@
+{
+    "slug": "flying-gorilla",
+    "title": "Flying Gorilla",
+    "version": "1.0.0",
+    "description": "Launch your gorilla and fly as far as you can, bouncing off branches and grabbing coins along the way. Spend coins on upgrades and beat your best distance.",
+    "controls": "Click or press Space to jump and fly. On touch screens, tap anywhere.",
+    "categories": ["casual", "arcade"],
+    "tags": ["gorilla", "flying", "jump", "endless", "monkey"],
+    "rating": "everyone",
+    "ratingNote": ""
+}
