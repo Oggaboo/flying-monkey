@@ -1,42 +1,55 @@
 #!/usr/bin/env python3
-"""Make 2web/cover.jpg (1280x720) and 2web/thumb.webp (512x512) from a 2560x1440 gameplay
-screenshot (the gorilla flying, no obstacle on screen).
+"""Make the 2Web pictures from the source art in 2web/art/.
 
-    python3 2web/make_pictures.py <screenshot.png> 2web
+    python3 2web/make_pictures.py
+
+- cover.jpg  (1280x720): art/cover-source.jpg as it is (already has the title, centre is clear).
+- thumb.webp (512x512):  art/tile-source.png with the title added along the bottom, because
+                         2Web tiles must show the game's title readable at 100 px.
+Needs Pillow and the Inter Display Black font (any heavy sans works; change FONT).
 """
-import sys
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-src, out = sys.argv[1], sys.argv[2]
-im = Image.open(src).convert('RGB')  # 2560x1440 gameplay frame
+import os, shutil
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ART = os.path.join(HERE, 'art')
 FONT = '/usr/share/fonts/opentype/inter/InterDisplay-Black.otf'
 
-def title(img, text, size, cx, cy, stroke):
-    d = ImageDraw.Draw(img)
-    f = ImageFont.truetype(FONT, size)
-    # soft shadow
-    sh = Image.new('L', img.size, 0); ImageDraw.Draw(sh).text((cx + size // 18, cy + size // 14), text, font=f, fill=200, anchor='mm', align='center', spacing=0)
-    sh = sh.filter(ImageFilter.GaussianBlur(size // 10))
-    img.paste(Image.new('RGB', img.size, (10, 20, 30)), (0, 0), sh)
-    d.multiline_text((cx, cy), text, font=f, fill=(255, 214, 40), anchor='mm', align='center',
-                     stroke_width=stroke, stroke_fill=(40, 22, 8), spacing=-size // 8)
 
-def band(img, top, h, alpha, from_top=True):
-    w = img.size[0]
+def bottom_band(img, top, alpha):
+    w, h = img.size[0], img.size[1] - top
     g = Image.new('L', (1, h))
     for y in range(h):
-        a = int(alpha * (1 - y / h)) if from_top else int(alpha * y / h)
-        g.putpixel((0, y), a)
-    g = g.resize((w, h))
-    img.paste(Image.new('RGB', (w, h), (8, 16, 28)), (0, top), g)
+        g.putpixel((0, y), int(alpha * y / h))
+    img.paste(Image.new('RGB', (w, h), (8, 16, 28)), (0, top), g.resize((w, h)))
 
-# cover: 1280x720, drop the HUD row, title in the top band, centre left clear
-cover = im.crop((142, 160, 2418, 1440)).resize((1280, 720), Image.LANCZOS)
-band(cover, 0, 230, 170)
-title(cover, 'FLYING GORILLA', 104, 640, 112, 6)
-cover.save(f'{out}/cover.jpg', quality=84, optimize=True, progressive=True)
 
-# thumb: 512x512 around the gorilla, title at the bottom
-thumb = im.crop((800, 380, 1760, 1340)).resize((512, 512), Image.LANCZOS)
-band(thumb, 300, 212, 210, from_top=False)
-title(thumb, 'FLYING\nGORILLA', 92, 256, 420, 5)
-thumb.save(f'{out}/thumb.webp', quality=82, method=6)
+def title(img, text, size, cx, cy, stroke):
+    f = ImageFont.truetype(FONT, size)
+    shadow = Image.new('L', img.size, 0)
+    ImageDraw.Draw(shadow).multiline_text((cx + size // 18, cy + size // 14), text, font=f, fill=200,
+                                          anchor='mm', align='center', spacing=-size // 8)
+    img.paste(Image.new('RGB', img.size, (10, 20, 30)), (0, 0), shadow.filter(ImageFilter.GaussianBlur(size // 10)))
+    ImageDraw.Draw(img).multiline_text((cx, cy), text, font=f, fill=(255, 214, 40), anchor='mm', align='center',
+                                       stroke_width=stroke, stroke_fill=(40, 22, 8), spacing=-size // 8)
+
+
+def main():
+    cover = Image.open(os.path.join(ART, 'cover-source.jpg'))
+    assert cover.size == (1280, 720), cover.size
+    shutil.copy(os.path.join(ART, 'cover-source.jpg'), os.path.join(HERE, 'cover.jpg'))
+
+    thumb = Image.open(os.path.join(ART, 'tile-source.png')).convert('RGB')
+    assert thumb.size == (512, 512), thumb.size
+    bottom_band(thumb, 300, 215)
+    title(thumb, 'FLYING\nGORILLA', 92, 256, 420, 5)
+    thumb.save(os.path.join(HERE, 'thumb.webp'), quality=82, method=6)
+
+    for f, limit in (('cover.jpg', 300_000), ('thumb.webp', 150_000)):
+        size = os.path.getsize(os.path.join(HERE, f))
+        print(f'{f}: {size / 1000:.0f} KB')
+        assert size < limit, f'{f} is over {limit // 1000} KB'
+
+
+if __name__ == '__main__':
+    main()
