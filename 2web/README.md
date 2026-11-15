@@ -8,7 +8,7 @@ What it does to the export:
 - **Size:** joins the split `.data`/`.wasm`, gzips them and splits into parts under 21 MB
   (72 MB to about 44 MB). `index.html` downloads the parts and unpacks them in the browser.
 - **Scene patch** (`patch_scene.py`):
-  - hides the Remove Ads shop items, the rewarded-ad button, Share, the rate-us popup and the
+  - hides the "Port by" credit line, the Remove Ads shop items, the rewarded-ad button, Share, the rate-us popup and the
     online ranking button and panel;
   - switches off `FirebaseController`;
   - turns off Unity Connect (analytics) and I2 Localization's Google Sheets sync;

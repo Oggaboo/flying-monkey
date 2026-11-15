@@ -17,6 +17,7 @@ HIDE = [
     'Canvas/ReviewPopUpPanel',                                        # "rate us" -> app store link
     'Canvas/Title/Main Panel/Content/Buttons/Ranking Button',                # Firebase online ranking
     'Canvas/Title/Sub Panel/Content/Ranking',                                # Firebase online ranking panel
+    'Canvas/Title/Main Panel/Content/Title Text/Title Text (1)',  # "Port by ..." credit line
     'Canvas/OfflineEarningsPanel/Content/Ad Button',                   # rewarded video (mobile ads)
 ]
 
@@ -135,7 +136,20 @@ def patch_bundle(data):
             o.set_raw_data(raw)
             found.add('i2-live-sync')
             print('i2 localization live sync: off')
-        missing = set(HIDE + DISABLE + list(MOVE) + list(SCALE) + ['i2-live-sync']) - found
+        # Blank the "Port by ..." credit text itself (its object is also hidden above).
+        for o in env.objects:
+            if o.type.name != 'MonoBehaviour':
+                continue
+            raw = o.get_raw_data()
+            at = raw.find(b'Port by 98corbins')
+            if at < 0:
+                continue
+            n = struct.unpack_from('<i', raw, at - 4)[0]
+            raw = raw[:at - 4] + b'\0\0\0\0' + raw[at + ((n + 3) & ~3):]
+            o.set_raw_data(raw)
+            found.add('port-credit')
+            print('credit text: blanked')
+        missing = set(HIDE + DISABLE + ['port-credit'] + list(MOVE) + list(SCALE) + ['i2-live-sync']) - found
         if missing:
             sys.exit('not found in scene: ' + ', '.join(sorted(missing)))
         bundle = next(iter(env.files.values()))
