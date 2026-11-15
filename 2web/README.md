@@ -21,5 +21,5 @@ What it does to the export:
   - stores saves under `flying-gorilla:` IndexedDB names;
   - logs the version and exposes `window.__game`.
 
-`make_pictures.py` makes `cover.jpg` and `thumb.webp` from the source art in `art/`, unchanged.
+`make_pictures.py` makes `cover.jpg` and `thumb.webp` from the source art in `art/` (the tile gets the title added).
 To release an update, bump `version` in `2web.json` and rebuild.

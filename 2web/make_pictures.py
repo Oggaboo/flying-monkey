@@ -4,7 +4,8 @@
     python3 2web/make_pictures.py
 
 - cover.jpg  (1280x720): art/cover-source.jpg as it is (already has the title, centre is clear).
-- thumb.webp (512x512):  art/tile-source.png as it is, re-encoded as WebP.
+- thumb.webp (512x512):  art/tile-source.png with the title added along the bottom, because
+                         2Web tiles must show the game's title readable at 100 px.
 Needs Pillow and the Inter Display Black font (any heavy sans works; change FONT).
 """
 import os, shutil
@@ -40,6 +41,8 @@ def main():
 
     thumb = Image.open(os.path.join(ART, 'tile-source.png')).convert('RGB')
     assert thumb.size == (512, 512), thumb.size
+    bottom_band(thumb, 300, 215)
+    title(thumb, 'FLYING\nGORILLA', 92, 256, 420, 5)
     thumb.save(os.path.join(HERE, 'thumb.webp'), quality=82, method=6)
 
     for f, limit in (('cover.jpg', 300_000), ('thumb.webp', 150_000)):
